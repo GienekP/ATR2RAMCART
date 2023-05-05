@@ -285,6 +285,9 @@ BACK	lda #$01
 		sta GINTLK
 		rts
 		
+		jsr RAMPROC+RESTRAM-ZEROCP
+		jmp $07E0	; MyDOS  4.53/4
+		
 RESTRAM lda PORTB
 		and #$FE
 		sta PORTB
@@ -360,13 +363,13 @@ SECREAD	lda #$01
 		
 		lda #$00
 		sta $D501
-		lda #$12	; Bank 2 tryb RO
+		lda #$12	; Bank 2 - RO
 		sta $D500
 				
 		ldy #$00
 		lda (TMP),Y
 		sta TMP+2
-		lda #$1A	; Bank 3 tryb RO
+		lda #$1A	; Bank 3 - RO
 		sta $D500
 		lda (TMP),Y
 		sta TMP+1
@@ -417,15 +420,12 @@ D1STAT  dta $38,$ff,$01,$00
 
 ;-----------------------------------------------------------------------		
 
-		ORG $BFF1
+		ORG $BFF9
 
 ;-----------------------------------------------------------------------		
 ; INITCART ROUTINE
 
-INIT	lda #$00
-		sta $D500
-		sta $D501
-		rts
+INIT	rts
 
 ;-----------------------------------------------------------------------		
 

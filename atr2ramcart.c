@@ -15,7 +15,7 @@ typedef unsigned char U8;
 #define NEWADDR 1
 /*--------------------------------------------------------------------*/
 #define BANKSIZE (2*8192)
-#define CARMAX (8*1024*1024)
+#define CARMAX (4*1024*1024)
 #define CLONESIZE (1024)
 #define ATRMAX (4*1024*1024)
 /*--------------------------------------------------------------------*/
@@ -84,87 +84,46 @@ unsigned int loadATR(const char *filename, U8 *data, U8 *sector, unsigned int *t
 	return ret;
 }
 /*--------------------------------------------------------------------*/
-void replace(U8 mode, U8 *atrdata, unsigned int i)
+U8 upgrade(U8 *atrdata, unsigned int atrsize, const U8 *old, const U8 *new, unsigned int size)
 {
-	static U8 f=0;
-	if (mode==NEWADDR)
+	U8 ret;
+	unsigned int i,j;
+	for (i=0; i<(atrsize-size); i++)
 	{
-		atrdata[i+1]=((RAMPROC)&0xFF);
-		atrdata[i+2]=(((RAMPROC)>>8)&0xFF);
-	};
-	if (f==0)
-	{
-		f=1;
-		if (mode==NEWADDR)
+		ret=1;
+		for (j=0; j<size; j++)
 		{
-			printf("Replace calls:\n");
-		}
-		else
-		{
-			printf("Possible calls:\n");
+			if (atrdata[i+j]!=old[j])
+			{
+				ret=0;
+				j=size;
+			};
 		};
-	};
+		if (ret==1)
+		{
+			printf("Upgrade (%i) ",i);
+			for (j=0; j<size; j++)
+			{
+				atrdata[i+j]=new[j];
+				printf("$%02X ",(int)(atrdata[i+j]));
+			};
+			printf("\n");
+			i=ATRMAX;
+		};
+	};	
+	return ret;
 }
 /*--------------------------------------------------------------------*/
-void checkXINT(U8 *atrdata, U8 mode)
+void upgradeMyDOS(U8 *atrdata, unsigned int atrsize)
 {
-	unsigned int i;
-	for (i=0; i<ATRMAX-3; i++)
-	{
-		if ((atrdata[i+1]==0x53) && (atrdata[i+2]==0xE4))
-		{
-			if (atrdata[i]==0x20)
-			{
-				replace(mode,atrdata,i);
-				printf(" JSR JDSKINT ; 0x%06X 20 53 E4 -> 20 00 01\n",i+16);
-				
-			};
-			if (atrdata[i]==0x4C)
-			{
-				replace(mode,atrdata,i);
-				printf(" JMP JDSKINT ; 0x%06X 4C 53 E4 -> 4C 00 01\n",i+16);
-			};			
-		};
-		if ((atrdata[i+1]==0xB3) && (atrdata[i+2]==0xC6))
-		{
-			if (atrdata[i]==0x20)
-			{
-				replace(mode,atrdata,i);
-				printf(" JSR DSKINT ; 0x%06X 20 B3 C6 -> 20 00 01\n",i+16);
-			};
-			if (atrdata[i]==0x4C)
-			{
-				replace(mode,atrdata,i);
-				printf(" JMP DSKINT ; 0x%06X 4C B3 C6 -> 4C 00 01\n",i+16);
-			};			
-		};
-		if ((atrdata[i+1]==0x59) && (atrdata[i+2]==0xE4))
-		{
-			if (atrdata[i]==0x20)
-			{
-				replace(mode,atrdata,i);
-				printf(" JSR JSIOINT ; 0x%06X 20 59 E4 -> 20 00 01\n",i+16);
-			};
-			if (atrdata[i]==0x4C)
-			{
-				replace(mode,atrdata,i);
-				printf(" JMP JSIOINT ; 0x%06X 4C 59 E4 -> 4C 00 01\n",i+16);
-			};			
-		};
-		if ((atrdata[i+1]==0x33) && (atrdata[i+2]==0xC9))
-		{
-			if (atrdata[i]==0x20)
-			{
-				replace(mode,atrdata,i);
-				printf(" JSR SIOINT ; 0x%06X 20 33 C9 -> 20 00 01\n",i+16);
-			};
-			if (atrdata[i]==0x4C)
-			{
-				replace(mode,atrdata,i);
-				printf(" JMP SIOINT ; 0x%06X 4C 3 C9 -> 4C 00 01\n",i+16);
-			};			
-		};	
-	};
+	// OLD DOS $07E0
+	// NEW DOS $012D  - calculated
+	const U8 old1[]={0x4D,0x03,0x00,0x07,0xE0,0x07,0x4C,0x14,0x07,0x03};
+	const U8 new1[]={0x4D,0x03,0x00,0x07,0x2D,0x01,0x4C,0x14,0x07,0x03};
+	const U8 old2[]={0xA9,0x07,0x85,0x0d,0xa9,0xE0,0x85,0x0c,0xa9,0x02};
+	const U8 new2[]={0xA9,0x01,0x85,0x0d,0xa9,0x2D,0x85,0x0c,0xa9,0x02};
+	upgrade(atrdata,atrsize,old1,new1,sizeof(old1)); 
+	upgrade(atrdata,atrsize,old2,new2,sizeof(old2));
 }
 /*--------------------------------------------------------------------*/
 void buildCar(const U8 *loader, unsigned int stsize, 
@@ -208,7 +167,7 @@ void buildCar(const U8 *loader, unsigned int stsize,
 /*--------------------------------------------------------------------*/
 U8 saveCAR(const char *filename, const U8 *data, unsigned int carsize)
 {
-	U8 header[16]={0x43, 0x41, 0x52, 0x54, 0x00, 0x00, 0x00, 0x52,
+	U8 header[16]={0x43, 0x41, 0x52, 0x54, 0x00, 0x00, 0x00, 0x51,
 		           0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00};
 	U8 ret=0;
 	int i;
@@ -251,7 +210,7 @@ void atr2ramcart(const char *atrfn, const char *carfn)
 		printf("ATR size: %i\n",atrsize+16);
 		if (sector==SEC256)
 		{
-			//checkXINT(atrdata,0);
+			upgradeMyDOS(atrdata,atrsize);
 			buildCar(starter_bin,starter_bin_len,atrdata,atrsize,cardata,CARMAX,type);
 			if (saveCAR(carfn,cardata,CARMAX))
 			{
